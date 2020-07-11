@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 void main() {
   runApp(MyApp());
@@ -6,8 +7,14 @@ void main() {
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
+
+  final String startUrl;
+
+  MyApp({this.startUrl});
+
   @override
   Widget build(BuildContext context) {
+    // return SafeArea(child: null)
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(
@@ -20,19 +27,23 @@ class MyApp extends StatelessWidget {
         // or simply save your changes to "hot reload" in a Flutter IDE).
         // Notice that the counter didn't reset back to zero; the application
         // is not restarted.
-        primarySwatch: Colors.blue,
+        primarySwatch: Colors.cyan,
         // This makes the visual density adapt to the platform that you run
         // the app on. For desktop platforms, the controls will be smaller and
         // closer together (more dense) than on mobile platforms.
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: MyHomePage(
+        title: 'Theシフト[開発版]',
+        url: 'http://dev.the-shift.tk',
+        permitUrl: 'http://dev.the-shift.tk/',
+      ), // todo 環境でURL変える
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
+  MyHomePage({Key key, this.title, this.url, this.permitUrl}) : super(key: key);
 
   // This widget is the home page of your application. It is stateful, meaning
   // that it has a State object (defined below) that contains fields that affect
@@ -44,6 +55,8 @@ class MyHomePage extends StatefulWidget {
   // always marked "final".
 
   final String title;
+  final String url;
+  final String permitUrl;
 
   @override
   _MyHomePageState createState() => _MyHomePageState();
@@ -51,6 +64,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+  String url = "";
 
   void _incrementCounter() {
     setState(() {
@@ -97,21 +111,38 @@ class _MyHomePageState extends State<MyHomePage> {
           // horizontal).
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
+            // Text(
+            //   'You have pushed the button this many times:',
+            // ),
+            // Text(
+            //   '$_counter',
+            //   style: Theme.of(context).textTheme.headline4,
+            // ),
+            Expanded(
+              child: Container(
+                child: InAppWebView(
+                  initialUrl: widget.url,
+                  onLoadStart: (InAppWebViewController controller, String url) {
+                    setState(() {
+                      // todo 許可URLのみ
+                      // if (Uri.parse(url).origin != widget.permitUrl) {
+                      //   controller.stopLoading();
+                      //   controller.loadUrl(url: widget.url);
+                      // }
+                      this.url = url;
+                    });
+                  },
+                ),
+              ),
+            )
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: _incrementCounter,
+      //   tooltip: 'Increment',
+      //   child: Icon(Icons.add),
+      // ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
