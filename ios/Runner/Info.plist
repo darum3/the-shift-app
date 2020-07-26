@@ -41,5 +41,26 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>io.flutter.embedded_views_preview</key>
+	<true/>
+	<!-- TODO for DEBUG -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>dev.the-shift.tk</key>
+			<dict>
+				<!-- add this key to enable subdomains such as sub.yourserver.com -->
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<!-- add this key to allow standard HTTP requests, thus negating the ATS -->
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<!-- add this key to specify the minimum TLS version to accept -->
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.1</string>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>

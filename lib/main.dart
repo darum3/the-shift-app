@@ -1,5 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'dart:io' as io;
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(MyApp());
@@ -34,16 +40,29 @@ class MyApp extends StatelessWidget {
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: MyHomePage(
-        title: 'Theシフト[開発版]',
-        url: 'http://dev.the-shift.tk',
-        permitUrl: 'http://dev.the-shift.tk/',
-      ), // todo 環境でURL変える
+          title: 'Theシフト[開発版]',
+          url: 'http://dev.the-shift.tk/home',
+          permitUrl: 'http://dev.the-shift.tk/',
+          loginPost: 'http://dev.the-shift.tk/login'), // todo 環境でURL変える
+      routes: <String, WidgetBuilder>{
+        '/main': (BuildContext context) => new MyHomePage(),
+        '/login': (BuildContext context) => new LoginPage(),
+        // '/home': (BuildContext context) => new MyHomePage(url: ,)
+      },
     );
   }
 }
 
+class LoginData {
+  LoginData({this.email, this.password});
+
+  String email;
+  String password;
+}
+
 class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title, this.url, this.permitUrl}) : super(key: key);
+  MyHomePage({Key key, this.title, this.url, this.permitUrl, this.loginPost})
+      : super(key: key);
 
   // This widget is the home page of your application. It is stateful, meaning
   // that it has a State object (defined below) that contains fields that affect
@@ -57,24 +76,22 @@ class MyHomePage extends StatefulWidget {
   final String title;
   final String url;
   final String permitUrl;
+  final String loginPost;
 
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
   String url = "";
+  String csrfToken = "";
+  bool inLoginProc = false;
+  SharedPreferences prefs;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  void initState() {
+    super.initState();
+
+    SharedPreferences.getInstance().then((_prefs) => this.prefs = _prefs);
   }
 
   @override
@@ -121,28 +138,195 @@ class _MyHomePageState extends State<MyHomePage> {
             Expanded(
               child: Container(
                 child: InAppWebView(
-                  initialUrl: widget.url,
-                  onLoadStart: (InAppWebViewController controller, String url) {
-                    setState(() {
-                      // todo 許可URLのみ
+                    initialUrl: widget.url,
+                    onLoadStart:
+                        (InAppWebViewController controller, String url) {
+                      setState(() {
+                        this.url = url;
+                      });
+                      // TODO 許可URLのみ
                       // if (Uri.parse(url).origin != widget.permitUrl) {
                       //   controller.stopLoading();
                       //   controller.loadUrl(url: widget.url);
                       // }
-                      this.url = url;
-                    });
-                  },
-                ),
+                    },
+                    onLoadStop:
+                        (InAppWebViewController controller, String url) async {
+                      setState(() {
+                        this.url = url;
+                      });
+                      debugPrint(url);
+                      List<String> storeCookies =
+                          this.prefs.getStringList('cookies') ?? new List();
+                      if (this.url.endsWith('/login')) {
+                        if (storeCookies.isEmpty) {
+                          controller.getMetaTags().then((value) {
+                            int index = value.indexWhere(
+                                (element) => element.name == 'csrf-token');
+                            if (index >= 0) {
+                              this.csrfToken = value[index].content;
+                            }
+                          });
+
+                          // var input =
+                          //     await Navigator.pushNamed(context, '/login');
+                          // LoginData value = input;
+//
+                          // String formBody = 'token=' + this.csrfToken;
+                          // formBody += '&email=' + value.email;
+                          // formBody += '&password=' + value.password;
+                          // formBody += '&remember="ok"';
+                          // List<int> bodyBytes = utf8.encode(formBody);
+                          // controller
+                          //     .postUrl(
+                          //         url: widget.loginPost, postData: bodyBytes)
+                          //     .then((result) {
+                          //   CookieManager cookieManager =
+                          //       CookieManager.instance();
+                          //   cookieManager
+                          //       .getCookies(
+                          //           url: Uri.parse(widget.loginPost).origin)
+                          //       .then((cookies) {
+                          //     List<String> store = new List();
+                          //     for (Cookie cookie in cookies) {
+                          //       store.add(json.encode(cookie.toJson()));
+                          //     }
+                          //     this.prefs.setStringList('cookies', store);
+                          //   });
+                          // });
+
+                          http.Response response;
+                          do {
+                            var input =
+                                await Navigator.pushNamed(context, '/login');
+                            LoginData value = input;
+
+                            Map<String, String> headers = {
+                              'Content-type':
+                                  'application/x-www-form-urlencoded',
+                            };
+                            Map<String, String> body = {
+                              '_token': this.csrfToken,
+                              'email': value.email,
+                              'password': value.password,
+                              "remember": "on",
+                            };
+                            response = await http.post(widget.loginPost,
+                                headers: headers, body: body);
+                          } while (response.statusCode != 302);
+
+                          String setCookies = response.headers['set-cookie'];
+                          var cookies = setCookies.split(',');
+                          for (int i = 0; i < cookies.length; i += 2) {
+                            io.Cookie cookie = io.Cookie.fromSetCookieValue(
+                                cookies[i] + cookies[i + 1]);
+                            CookieManager cookieManager =
+                                CookieManager.instance();
+                            cookieManager.setCookie(
+                                url: Uri.parse(widget.loginPost).origin +
+                                    cookie.path,
+                                name: cookie.name,
+                                value: cookie.value);
+                          }
+                          debugPrint(response.headers.toString());
+                          controller.loadUrl(url: response.headers['location']);
+                        } else {
+                          CookieManager cookieManager =
+                              CookieManager.instance();
+                          for (String storeCookie in storeCookies) {
+                            var decodeCookie = json.decode(storeCookie);
+                            // debugPrint(decodeCookie.toString());
+                            cookieManager.setCookie(
+                              url: Uri.parse(widget.loginPost).origin,
+                              name: decodeCookie['name'],
+                              value: decodeCookie['value'],
+                            );
+                          }
+                        }
+                      }
+                    }),
               ),
             )
           ],
         ),
       ),
-      // floatingActionButton: FloatingActionButton(
-      //   onPressed: _incrementCounter,
-      //   tooltip: 'Increment',
-      //   child: Icon(Icons.add),
-      // ), // This trailing comma makes auto-formatting nicer for build methods.
+    );
+  }
+}
+
+class LoginPage extends StatefulWidget {
+  LoginPage({Key key}) : super(key: key);
+
+  @override
+  _LoginPageState createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  var _userController = TextEditingController();
+  var _passwordController = TextEditingController();
+
+  FocusNode focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+
+    focusNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    focusNode.dispose();
+
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+          appBar: AppBar(
+            title: Text('ログイン'),
+          ),
+          body: Container(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                // mainAxisAlignment: MainAxisAlignment.start,
+                children: <Widget>[
+                  // Text('情報を入��'),
+                  Text('メールアドレス:'),
+                  TextField(
+                    controller: _userController,
+                    autofocus: true,
+                  ),
+                  Container(
+                    padding: EdgeInsets.fromLTRB(0, 24.0, 0, 0),
+                    child: Text('パスワード'),
+                  ),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: true,
+                    focusNode: focusNode,
+                  ),
+                  Container(
+                    padding: EdgeInsets.fromLTRB(0, 32.0, 0, 0),
+                    child: Center(
+                        child: RaisedButton(
+                      child: Text('ログイン'),
+                      onPressed: () => setState(() {
+                        Navigator.pop(
+                            context,
+                            new LoginData(
+                                email: _userController.text,
+                                password: _passwordController.text));
+                      }),
+                      color: Colors.cyan,
+                      focusNode: focusNode,
+                    )),
+                  ),
+                ],
+              ))),
     );
   }
 }
